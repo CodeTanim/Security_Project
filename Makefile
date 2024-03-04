@@ -6,11 +6,13 @@ TSOURCE := $(wildcard tests/*.c)
 TESTS   := $(TSOURCE:.c=)
 
 COMMON   := -O2 -Wall
-CFLAGS   := $(CFLAGS) $(COMMON)
+# Include paths for GMP and OpenSSL headers
+CFLAGS   := $(CFLAGS) $(COMMON) -I/opt/homebrew/include -I/opt/homebrew/opt/openssl@3/include
 CC       := gcc
 LDADD    := -lcrypto -lssl -lgmp
 LD       := $(CC)
-LDFLAGS  := # -L/usr/local/lib/
+# Library paths for GMP and OpenSSL libraries
+LDFLAGS  := -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/lib
 DEFS     :=
 ifeq ($(shell uname),Linux)
 DEFS += -DLINUX
