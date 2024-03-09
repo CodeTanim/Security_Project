@@ -9,7 +9,7 @@
 #include "../prf.h"
 
 /* turn this on to print more stuff. */
-#define VDEBUG 0
+#define VDEBUG 1
 /* turn this on for randomized tests. */
 #define RANDKEY 0
 
@@ -25,7 +25,8 @@ int soundCheck(char* message, SKE_KEY* K, unsigned char* IV, unsigned char errMa
 	#if VDEBUG
 	size_t i;
 	for (i = 0; i < ctLen; i++) {
-		fprintf(stderr, "%02x",ct[i]);
+		printf("%02x",ct[i]);
+		fprintf(stderr, "%02x ", ct[i]);
 	}
 	fprintf(stderr, "\n");
 	#endif
@@ -34,6 +35,7 @@ int soundCheck(char* message, SKE_KEY* K, unsigned char* IV, unsigned char errMa
 	/* tweak ct and see what happens: */
 	ct[rand() % ctLen] ^= errMask;
 	size_t r = ske_decrypt((unsigned char*)pt,ct,ctLen,K);
+	print(r);
 	if (r == -1) {
 		#if VDEBUG
 		fprintf(stderr, "Invalid ciphertext x_x\n");

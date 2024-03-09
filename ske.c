@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <openssl/err.h>
 #ifdef LINUX
 #define MMAP_SEQ MAP_PRIVATE|MAP_POPULATE
 #else
@@ -36,6 +37,13 @@ int ske_keyGen(SKE_KEY* K, unsigned char* entropy, size_t entLen)
 	/* TODO: write this.  If entropy is given, apply a KDF to it to get
 	 * the keys (something like HMAC-SHA512 with KDF_KEY will work).
 	 * If entropy is null, just get a random key (you can use the PRF). */
+	if (entropy) {
+		return HMAC(EVP_sha512(), KDF_KEY, HM_LEN, entropy, entLen, K->hmacKey, NULL);
+	} else {
+		unsigned char randomKey[15];
+		randBytes(randomKey, 15);
+		memcpy(K->hmacKey, randomKey, 15);
+	}
 	return 0;
 }
 size_t ske_getOutputLen(size_t inputLen)
@@ -48,9 +56,28 @@ size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	/* TODO: finish writing this.  Look at ctr_example() in aes-example.c
 	 * for a hint.  Also, be sure to setup a random IV if none was given.
 	 * You can assume outBuf has enough space for the result. */
-	return 0; /* TODO: should return number of bytes written, which
+	if (!IV) {
+		IV = malloc(32);
+		randBytes(IV, 32);
+	}
+	// printf("encrpyt IV ", IV);
+	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+	if (1!=EVP_EncryptInit_ex(ctx,EVP_aes_256_ctr(),0,K->hmacKey,IV))
+		ERR_print_errors_fp(stderr);
+
+	int nWritten;
+	if (1!=EVP_EncryptUpdate(ctx, outBuf, &nWritten, inBuf, len))
+		ERR_print_errors_fp(stderr);
+	EVP_CIPHER_CTX_free(ctx);
+	
+	for (size_t i = 0; i < nWritten; i++) {
+		printf("%02x ", outBuf[i]);
+	}
+
+	return nWritten; /* TODO: should return number of bytes written, which
 	             hopefully matches ske_getOutputLen(...). */
 }
+
 size_t ske_encrypt_file(const char* fnout, const char* fnin,
 		SKE_KEY* K, unsigned char* IV, size_t offset_out)
 {
@@ -64,11 +91,31 @@ size_t ske_decrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	 * Oh, and also, return -1 if the ciphertext is found invalid.
 	 * Otherwise, return the number of bytes written.  See aes-example.c
 	 * for how to do basic decryption. */
-	return 0;
+	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+	unsigned char IV[15];
+  memcpy(IV, inBuf, 15);
+	for (int i = 0; i < 15; i++) {
+    printf("%02X ", IV[i]);
+	}
+	if (1 != EVP_DecryptInit_ex(ctx,EVP_aes_256_ctr(), 0, K->hmacKey, NULL))
+		ERR_print_errors_fp(stderr);
+	int nWritten = 0;
+	if (1 != EVP_DecryptUpdate(
+		ctx, 
+		outBuf, 
+		&nWritten, 
+		inBuf+32, 
+		len-32)
+	) {
+		ERR_print_errors_fp(stderr);
+	}
+	EVP_CIPHER_CTX_free(ctx);
+	// printf("Decrypted Data: %.*s\n", nWritten, outBuf);
+	return nWritten;
 }
 size_t ske_decrypt_file(const char* fnout, const char* fnin,
 		SKE_KEY* K, size_t offset_in)
 {
 	/* TODO: write this. */
-	return 0;
+	return -1;
 }
