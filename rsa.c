@@ -64,91 +64,95 @@ int rsa_keyGen(size_t keyBits, RSA_KEY *K)
 	 * pieces of the key ({en,de}crypting exponents, and n=pq). */
 
 	// answer:
-	// Seed the random number generator.
-	gmp_randstate_t randState;
-	gmp_randinit_default(randState);
-	gmp_randseed_ui(randState, time(NULL));
+	size_t primeBytes = keyBits / 16;
 
-	// Calculate the number of bits for p and q
-	size_t primeBits = keyBits / 2;
+	unsigned char *randomBytes = malloc(primeBytes); // allocate memory for prime bytes
+
+	// Generate prime p and q
 
 	NEWZ(p);
+
+	int isPrime = 0;
+	while (!isPrime)
+	{
+		// Generate random bytes
+		randBytes(randomBytes, primeBytes);
+
+		// Convert random bytes to mpz_t integer (p)
+		BYTES2Z(p, randomBytes, primeBytes);
+
+		mpz_setbit(p, keyBits / 2 - 1); // Ensure p is within the desired range
+
+		// Test for primality
+		isPrime = ISPRIME(p);
+	}
+
 	NEWZ(q);
+	int isPrime2 = 0;
+
+	while (!isPrime2)
+	{
+
+		// Generate random bytes
+		randBytes(randomBytes, primeBytes);
+
+		// Convert random bytes to mpz_t integer (p)
+		BYTES2Z(q, randomBytes, primeBytes);
+
+		mpz_setbit(q, keyBits / 2 - 1); // Ensure q is within the desired range
+
+		// Test for primality
+		isPrime2 = ISPRIME(q);
+	}
+
+	// Calculate  n = p*q and phi = (p-1)(q-1)
+
 	NEWZ(phi);
-
-	// Generate two distinct primes p and q
-	do
-	{
-		mpz_urandomb(p, randState, primeBits);
-		mpz_nextprime(p, p);
-	} while (!ISPRIME(p));
-
-	do
-	{
-		mpz_urandomb(q, randState, primeBits);
-		mpz_nextprime(q, q);
-	} while (!ISPRIME(q) || mpz_cmp(p, q) == 0); // Ensure p != q
-
-	// Compute n = p*q
 	mpz_mul(K->n, p, q);
+	mpz_sub_ui(p, p, 1); // p = p-1
+	mpz_sub_ui(q, q, 1); // q = q-1
+	mpz_mul(phi, p, q);	 // phi = (p-1)*(q-1)
 
-	// Compute φ(n) = (p-1)*(q-1)
-	mpz_sub_ui(p, p, 1);
-	mpz_sub_ui(q, q, 1);
-	mpz_mul(phi, p, q);
-
-	// Choose e, commonly 65537, ensuring gcd(e, φ(n)) = 1
+	// public exponent e
 	mpz_set_ui(K->e, 65537);
 
-	// Compute d, the modular multiplicative inverse of e mod φ(n)
+	// compute private exponent d as the modular inverse of e mod phi
+
 	mpz_invert(K->d, K->e, phi);
 
-	// Clean up
 	mpz_clear(p);
 	mpz_clear(q);
 	mpz_clear(phi);
-	gmp_randclear(randState);
+	free(randomBytes);
 
 	return 0;
 }
+
 size_t rsa_encrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 				   RSA_KEY *K)
 {
 	/* TODO: write this.  Use BYTES2Z to get integers, and then
 	 * Z2BYTES to write the output buffer. */
 
-	// answer:
 	// Initialize GMP variables for the message, ciphertext, and n
-	mpz_t m, c;
-	mpz_init(m);
-	mpz_init(c);
 
-	// Convert the input buffer (plaintext) into an mpz_t integer (m)
+	NEWZ(m);		   // holds plaintext message converted to an int
+	NEWZ(c);		   // will hold th ciphertext message after encryption
+	size_t outLen = 0; // holds the length of the output buffer
+
+	// 1. Convert the inBuf (message) of length len  into an mpz_t integer m
 	BYTES2Z(m, inBuf, len);
 
-	// Encrypt the message: c = m^e mod n
-	mpz_powm(c, m, K->e, K->n);
+	// 2. Do the RSA Encryption: c = (m^e) mod n.
+	mpz_powm(c, m, K->e, K->n); // e is the public exponent, n is the modulus part of the public key.
 
-	// Determine the size of the ciphertext in bytes and ensure the output buffer is large enough
-	size_t written = 0;
-	size_t cSize = (mpz_sizeinbase(c, 2) + 7) / 8; // Calculate ciphertext size in bytes
-	if (cSize > len)
-	{
-		// The output buffer is not large enough to hold the ciphertext
-		fprintf(stderr, "Error: Output buffer too small for encrypted data.\n");
-	}
-	else
-	{
-		// Convert the ciphertext integer (c) back into a byte array (outBuf)
-		Z2BYTES(outBuf, written, c);
-	}
+	// 3. After encryption, Convert ciphertext integer c back into byte array outBuf. Outlen is updated to reflect the size of the output buffer.
+	Z2BYTES(outBuf, outLen, c);
 
-	// Clear GMP variables to avoid memory leak
 	mpz_clear(m);
 	mpz_clear(c);
 
-	// Return the number of bytes written to the output buffer
-	return written;
+	return outLen; // length of ciphertext in bytes.
 }
 
 size_t rsa_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
@@ -157,36 +161,24 @@ size_t rsa_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 	/* TODO: write this.  See remarks above. */
 
 	// Initialize GMP variables for the ciphertext, decrypted message, and n
-	mpz_t c, m;
-	mpz_init(c);
-	mpz_init(m);
+	NEWZ(m);
+	NEWZ(c);
 
-	// Convert the input buffer (ciphertext) into an mpz_t integer (c)
+	size_t outLen = 0; // holds the length of the output buffer.
+
+	// convert input buffer (ciphertext) into an mpz_t integer c.
 	BYTES2Z(c, inBuf, len);
 
-	// Decrypt the ciphertext: m = c^d mod n
+	// RSA Decryption: m = (c^d) mod n
 	mpz_powm(m, c, K->d, K->n);
 
-	// Determine the size of the decrypted message in bytes and ensure the output buffer is large enough
-	size_t written = 0;
-	size_t mSize = (mpz_sizeinbase(m, 2) + 7) / 8; // Calculate message size in bytes
-	if (mSize > len)
-	{
-		// The output buffer is not large enough to hold the decrypted data
-		fprintf(stderr, "Error: Output buffer too small for decrypted data.\n");
-	}
-	else
-	{
-		// Convert the decrypted message integer (m) back into a byte array (outBuf)
-		Z2BYTES(outBuf, written, m);
-	}
+	// Convert the decrypted message m back into byte array outBuf.
+	Z2BYTES(outBuf, outLen, m); // outLen will now hold the length of the new output buffer.
 
-	// Clear GMP variables to avoid memory leak
-	mpz_clear(c);
 	mpz_clear(m);
+	mpz_clear(c);
 
-	// Return the number of bytes written to the output buffer
-	return written;
+	return outLen; // length of the decrypted message in bytes.
 }
 
 size_t rsa_numBytesN(RSA_KEY *K)
