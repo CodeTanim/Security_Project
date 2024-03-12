@@ -60,7 +60,6 @@ size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	 * for a hint.  Also, be sure to setup a random IV if none was given.
 	 * You can assume outBuf has enough space for the result. */
 	if (!IV) {
-		// IV = malloc(16);
 		randBytes(IV, 16);
 	}
 
