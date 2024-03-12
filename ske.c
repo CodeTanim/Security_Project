@@ -56,54 +56,6 @@ size_t ske_getOutputLen(size_t inputLen)
 	return AES_BLOCK_SIZE + inputLen + HM_LEN;
 }
 
-// size_t ske_encrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
-// 				   SKE_KEY *K, unsigned char *IV)
-// {
-// 	/* TODO: finish writing this.  Look at ctr_example() in aes-example.c
-// 	 * for a hint.  Also, be sure to setup a random IV if none was given.
-// 	 * You can assume outBuf has enough space for the result. */
-// 	if (!IV)
-// 	{
-// 		// IV = malloc(16);
-// 		randBytes(IV, 16);
-// 	}
-
-// 	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-// 	if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), 0, K->aesKey, IV))
-// 	{
-// 		ERR_print_errors_fp(stderr);
-// 		return -1;
-// 	}
-
-// 	int nWritten = 0;
-// 	unsigned char cipherText[len];
-// 	if (1 != EVP_EncryptUpdate(ctx, cipherText, &nWritten, inBuf, len))
-// 	{
-// 		ERR_print_errors_fp(stderr);
-// 		return -1;
-// 	}
-
-// 	unsigned char IVCipherText[16 + nWritten];
-// 	memcpy(IVCipherText, IV, 16);
-// 	memcpy(IVCipherText + 16, cipherText, nWritten);
-
-// 	unsigned char computedMac[HM_LEN];
-// 	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, IVCipherText, len + 16, computedMac, NULL);
-
-// 	// memcpy(outBuf, IVCipherText, 16 + nWritten);
-// 	// memcpy(outBuf + nWritten + 16, computedMac, HM_LEN);
-
-// 	memcpy(outBuf, IV, 16);
-// 	memcpy(outBuf + 16, cipherText, nWritten);
-// 	memcpy(outBuf + 16 + nWritten, computedMac, HM_LEN);
-
-// 	EVP_CIPHER_CTX_free(ctx); //
-
-// 	return nWritten + 16 + HM_LEN; /* TODO: should return number of bytes written, which
-// 				 hopefully matches ske_getOutputLen(...). */
-// }
-
 size_t ske_encrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 				   SKE_KEY *K, unsigned char *IV)
 {
@@ -112,7 +64,6 @@ size_t ske_encrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 	 * You can assume outBuf has enough space for the result. */
 	if (!IV)
 	{
-		// IV = malloc(16);
 		randBytes(IV, 16);
 	}
 
@@ -154,7 +105,6 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 	/* TODO: write this.  Hint: mmap. */
 	return 0;
 }
-
 size_t ske_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 				   SKE_KEY *K)
 {
@@ -186,7 +136,7 @@ size_t ske_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 	}
 
 	int nWritten = 0;
-	if (1 != EVP_DecryptUpdate(ctx, outBuf, &nWritten, inBuf + 16, len - 16))
+	if (1 != EVP_DecryptUpdate(ctx, outBuf, &nWritten, inBuf + 16, len - 16 - HM_LEN))
 	{
 		ERR_print_errors_fp(stderr);
 		return -1;
