@@ -83,7 +83,7 @@ size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	memcpy(IVCipherText+16, cipherText, nWritten);
 
 	unsigned char computedMac[HM_LEN];
-	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, &IVCipherText, nWritten+16, computedMac, NULL);
+	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, IVCipherText, nWritten+16, computedMac, NULL);
 	
 	memcpy(outBuf, IVCipherText, 16+nWritten);
 	memcpy(outBuf + nWritten + 16, computedMac, HM_LEN);
@@ -129,7 +129,7 @@ size_t ske_decrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	}
 
 	int nWritten = 0;
-	if (1 != EVP_DecryptUpdate(ctx, outBuf, &nWritten, inBuf+16, len-16)) {
+	if (1 != EVP_DecryptUpdate(ctx, outBuf, &nWritten, inBuf+16, len-16-HM_LEN)) {
 		ERR_print_errors_fp(stderr);
 		return -1;
 	}
