@@ -38,13 +38,14 @@ int ske_keyGen(SKE_KEY* K, unsigned char* entropy, size_t entLen)
 	/* TODO: write this.  If entropy is given, apply a KDF to it to get
 	 * the keys (something like HMAC-SHA512 with KDF_KEY will work).
 	 * If entropy is null, just get a random key (you can use the PRF). */
+	unsigned char key[64];
 	if (entropy) {
-		return HMAC(EVP_sha512(), KDF_KEY, HM_LEN, entropy, entLen, K->hmacKey, NULL);
+		HMAC(EVP_sha512(), KDF_KEY, 2*HM_LEN, entropy, entLen, key, NULL);
 	} else {
-		unsigned char randomKey[32];
-		randBytes(randomKey, 32);
-		memcpy(K->hmacKey, randomKey, 32);
+		randBytes(key, 64);
 	}
+	memcpy(K->hmacKey, key, 32);
+	memcpy(K->aesKey, key+32, 32);
 	return 0;
 }
 size_t ske_getOutputLen(size_t inputLen)
@@ -65,21 +66,24 @@ size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 
 	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
 
-	if (1!=EVP_EncryptInit_ex(ctx,EVP_aes_256_ctr(),0,K->hmacKey,IV)) {
+	if (1!=EVP_EncryptInit_ex(ctx,EVP_aes_256_ctr(),0,K->aesKey,IV)) {
 		ERR_print_errors_fp(stderr);
 		return -1;
 	}
 
 	int nWritten = 0;
-	unsigned char IVCipherText[16+len];
-	memcpy(IVCipherText, IV, 16);
-	if (1!=EVP_EncryptUpdate(ctx, IVCipherText+16, &nWritten, inBuf, len)) {
+	unsigned char cipherText[len];
+	if (1!=EVP_EncryptUpdate(ctx, cipherText, &nWritten, inBuf, len)) {
 		ERR_print_errors_fp(stderr);
 		return -1;
 	}
 
+	unsigned char IVCipherText[16+nWritten];
+	memcpy(IVCipherText, IV, 16);
+	memcpy(IVCipherText+16, cipherText, nWritten);
+
 	unsigned char computedMac[HM_LEN];
-	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, IVCipherText, len+16, computedMac, NULL);
+	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, &IVCipherText, nWritten+16, computedMac, NULL);
 	
 	memcpy(outBuf, IVCipherText, 16+nWritten);
 	memcpy(outBuf + nWritten + 16, computedMac, HM_LEN);
@@ -114,24 +118,12 @@ size_t ske_decrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	unsigned char computedMac[HM_LEN];
 	HMAC(EVP_sha256(), K->hmacKey, HM_LEN, IVCipherText, len-HM_LEN, computedMac, NULL);
 
-	printf("received mac: ");
-	for (size_t i = 0; i < HM_LEN; i++)
-	{
-			printf("%02x", receivedMac[i]);
-	}
-
-	printf("computed mac: ");
-	for (size_t i = 0; i < HM_LEN; i++)
-	{
-			printf("%02x", computedMac[i]);
-	}
-
 	if (memcmp(receivedMac, computedMac, HM_LEN) != 0) {
 		return -1;
 	}
 	
 	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-	if (1 != EVP_DecryptInit_ex(ctx,EVP_aes_256_ctr(), 0, K->hmacKey, IV)) {
+	if (1 != EVP_DecryptInit_ex(ctx,EVP_aes_256_ctr(), 0, K->aesKey, IV)) {
 		ERR_print_errors_fp(stderr);
 		return -1;
 	}
