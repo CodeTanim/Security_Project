@@ -25,7 +25,8 @@ int soundCheck(char* message, SKE_KEY* K, unsigned char* IV, unsigned char errMa
 	#if VDEBUG
 	size_t i;
 	for (i = 0; i < ctLen; i++) {
-		fprintf(stderr, "%02x",ct[i]);
+		printf("%02x",ct[i]);
+		fprintf(stderr, "%02x ", ct[i]);
 	}
 	fprintf(stderr, "\n");
 	#endif
