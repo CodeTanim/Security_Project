@@ -13,7 +13,7 @@
 #include <sys/mman.h>
 #include <openssl/err.h>
 #ifdef LINUX
-#define MMAP_SEQ MAP_PRIVATE|MAP_POPULATE
+#define MMAP_SEQ MAP_PRIVATE | MAP_POPULATE
 #else
 #define MMAP_SEQ MAP_PRIVATE
 #endif
@@ -33,12 +33,13 @@
 /* need to make sure KDF is orthogonal to other hash functions, like
  * the one used in the KDF, so we use hmac with a key. */
 
-int ske_keyGen(SKE_KEY* K, unsigned char* entropy, size_t entLen)
+int ske_keyGen(SKE_KEY *K, unsigned char *entropy, size_t entLen)
 {
 	/* TODO: write this.  If entropy is given, apply a KDF to it to get
 	 * the keys (something like HMAC-SHA512 with KDF_KEY will work).
 	 * If entropy is null, just get a random key (you can use the PRF). */
 	unsigned char key[64];
+
 	if (entropy) {
 		HMAC(EVP_sha512(), KDF_KEY, 2*HM_LEN, entropy, entLen, key, NULL);
 	} else {
@@ -46,6 +47,7 @@ int ske_keyGen(SKE_KEY* K, unsigned char* entropy, size_t entLen)
 	}
 	memcpy(K->hmacKey, key, 32);
 	memcpy(K->aesKey, key+32, 32);
+
 	return 0;
 }
 size_t ske_getOutputLen(size_t inputLen)
@@ -53,12 +55,14 @@ size_t ske_getOutputLen(size_t inputLen)
 	return AES_BLOCK_SIZE + inputLen + HM_LEN;
 }
 
+
 size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 		SKE_KEY* K, unsigned char* IV)
 {
 	/* TODO: finish writing this.  Look at ctr_example() in aes-example.c
 	 * for a hint.  Also, be sure to setup a random IV if none was given.
 	 * You can assume outBuf has enough space for the result. */
+
 	if (!IV) {
 		randBytes(IV, 16);
 	}
@@ -73,6 +77,7 @@ size_t ske_encrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
 	int nWritten = 0;
 	unsigned char cipherText[len];
 	if (1!=EVP_EncryptUpdate(ctx, cipherText, &nWritten, inBuf, len)) {
+
 		ERR_print_errors_fp(stderr);
 		return -1;
 	}
@@ -99,8 +104,8 @@ size_t ske_encrypt_file(const char* fnout, const char* fnin,
 	/* TODO: write this.  Hint: mmap. */
 	return 0;
 }
-size_t ske_decrypt(unsigned char* outBuf, unsigned char* inBuf, size_t len,
-		SKE_KEY* K)
+size_t ske_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
+				   SKE_KEY *K)
 {
 	/* TODO: write this.  Make sure you check the mac before decypting!
 	 * Oh, and also, return -1 if the ciphertext is found invalid.
