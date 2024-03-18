@@ -147,6 +147,65 @@ size_t ske_decrypt(unsigned char *outBuf, unsigned char *inBuf, size_t len,
 size_t ske_decrypt_file(const char* fnout, const char* fnin,
 		SKE_KEY* K, size_t offset_in)
 {
-	/* TODO: write this. */
-	return -1;
+	int fd_in, fd_out;
+    struct stat sb;
+    unsigned char *mapped, *decrypted_data;
+    size_t decrypted_size;
+
+    // Open the input file
+    fd_in = open(fnin, O_RDONLY);
+    if (fd_in == -1) {
+        perror("Error opening input file");
+        return -1;
+    }
+
+    // Get the size of the file
+    if (fstat(fd_in, &sb) == -1) {
+        perror("Error getting file size");
+        close(fd_in);
+        return -1;
+    }
+
+    // Memory-map the input file
+    mapped = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd_in, 0);
+    if (mapped == MAP_FAILED) {
+        perror("Error memory-mapping the input file");
+        close(fd_in);
+        return -1;
+    }
+
+    // Assume decrypted_data is allocated by ske_decrypt or it directly modifies the 'mapped' buffer.
+    // Also assume ske_decrypt adjusts the file size for any potential size changes due to padding, etc.
+    decrypted_size = ske_decrypt(mapped + offset_in, sb.st_size - offset_in, decrypted_size, K);
+    if (decrypted_size == (size_t)-1) {
+        munmap(mapped, sb.st_size);
+        close(fd_in);
+        perror("Decryption failed");
+        return -1;
+    }
+
+    // Open or create the output file
+    fd_out = open(fnout, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    if (fd_out == -1) {
+        perror("Error opening output file");
+        munmap(mapped, sb.st_size);
+        close(fd_in);
+        return -1;
+    }
+
+    // Write the decrypted data to the output file
+    if (write(fd_out, mapped + offset_in, decrypted_size) != decrypted_size) {
+        perror("Error writing decrypted data to output file");
+        munmap(mapped, sb.st_size);
+        close(fd_in);
+        close(fd_out);
+        return -1;
+    }
+
+    // Clean up
+    munmap(mapped, sb.st_size);
+    close(fd_in);
+    close(fd_out);
+
+    return decrypted_size;
 }
