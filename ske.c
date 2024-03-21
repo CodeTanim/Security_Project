@@ -108,7 +108,6 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 {
 	size_t result, fileSize;
 	struct stat st;			   // used to get size of file
-	unsigned char *mappedFile; // for mmap
 	int returnval;
 	returnval = access(fnin, R_OK);
 
@@ -172,7 +171,8 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 				{
 					size_t bytes_written = write(fdTwo, outPutBuffer, result);
 					close(fdTwo);
-					printf("\n encrypted successfully");
+					printf("encrypted successfully \n");
+					return result;
 				}
 			}
 		}
@@ -225,5 +225,77 @@ size_t ske_decrypt_file(const char *fnout, const char *fnin,
 						SKE_KEY *K, size_t offset_in)
 {
 	/* TODO: write this. */
-	return -1;
+	size_t result, fileSize;
+	struct stat st; // used to get size of file
+	int returnval;
+	returnval = access(fnin, R_OK);
+
+	if (returnval != 0)
+	{
+		if (errno == ENOENT)
+		{
+			printf("%s does not exist", fnin);
+		}
+		else if (errno == EACCES)
+		{
+			printf("%s is not accessible, do not have Read Access", fnin);
+		}
+	}
+	else // If the encrypted file exists and we have read access, this block of code will execute
+	{
+		int fd = open(fnin, O_RDONLY);
+		if (fd == -1)
+		{
+			printf("\n open() failed with error [%s]\n", strerror(errno));
+			return 1;
+		}
+		else
+		{
+			unsigned char buffer[1024];
+			// For best practices, you would use `ssize_t` for error handling (read would output -1 if an error occurs) but for simplicity, we will assume no errors will occur (gg error handling)
+			size_t bytesRead = read(fd, buffer, sizeof(buffer));
+
+			stat(fnin, &st);
+			fileSize = st.st_size;
+
+			size_t outputBufferSize = fileSize - 16 - HM_LEN;
+			unsigned char *outPutBuffer = malloc(outputBufferSize);
+
+			result = ske_decrypt(outPutBuffer, buffer, fileSize, K);
+
+			int fdTwo = open(fnout, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+			if (fdTwo == -1)
+			{
+				printf("\n open() failed with error [%s]\n", strerror(errno));
+				return 1;
+			}
+			else
+			{
+				int fnOutAccess;
+				fnOutAccess = access(fnout, W_OK);
+				if (fnOutAccess != 0)
+				{
+					if (errno == ENOENT)
+					{
+						printf("%s does not exist", fnout);
+						return 2;
+					}
+					else if (errno == EACCES)
+					{
+						printf("%s is not accessible, do not have Write Access", fnout);
+						return 3;
+					}
+				}
+				else
+				{
+					size_t bytes_written = write(fdTwo, outPutBuffer, result);
+					close(fdTwo);
+					printf("decrypted successfully \n");
+					return result;
+				}
+			}
+		}
+	}
+	return 0;
+	
 }
