@@ -7,12 +7,12 @@ TESTS   := $(TSOURCE:.c=)
 
 COMMON   := -O2 -Wall
 # Include paths for GMP and OpenSSL headers
-CFLAGS   := $(CFLAGS) $(COMMON) -I/opt/homebrew/include -I/opt/homebrew/opt/openssl@3/include
+CFLAGS   := $(CFLAGS) $(COMMON) -I/opt/homebrew/Cellar/gmp/6.3.0/include -I/opt/homebrew/opt/openssl@3/include
 CC       := gcc
 LDADD    := -lcrypto -lssl -lgmp
 LD       := $(CC)
 # Library paths for GMP and OpenSSL libraries
-LDFLAGS  := -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/lib
+LDFLAGS  := -L/opt/homebrew/opt/openssl@3/lib -L/opt/homebrew/Cellar/gmp/6.3.0/lib
 DEFS     :=
 ifeq ($(shell uname),Linux)
 DEFS += -DLINUX
