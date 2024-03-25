@@ -7,8 +7,10 @@
 #include <getopt.h>
 #include <string.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 #include <openssl/sha.h>
-
+#include <openssl/rand.h>
 #include "ske.h"
 #include "rsa.h"
 #include "prf.h"
@@ -52,12 +54,111 @@ enum modes {
 
 #define HASHLEN 32 /* for sha256 */
 
+
 int kem_encrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 {
 	/* TODO: encapsulate random symmetric key (SK) using RSA and SHA256;
 	 * encrypt fnIn with SK; concatenate encapsulation and cihpertext;
 	 * write to fnOut. */
-	return 0;
+
+	 //Generate a random key for symmetric encryption (x).
+    size_t x_len = rsa_numBytesN(K); // Length based on RSA modulus size
+    unsigned char* x = malloc(x_len);
+    if (!x) {
+        return -1;
+    }
+    if (RAND_bytes(x, x_len) != 1) {
+        // Handle OpenSSL random bytes generation error
+        free(x);
+        fprintf(stderr, "Random bytes generation failed.\n");
+        return -1;
+    }
+
+    //Encrypt x using RSA (Epk(x)).
+    unsigned char* Epk_x = malloc(x_len); // Buffer for RSA encryption
+    if (!Epk_x) {
+        free(x);
+        return -1;
+    }
+    size_t Epk_x_len = rsa_encrypt(Epk_x, x, x_len, K);
+
+    //Compute the hash of x (H(x)).
+    unsigned char H_x[SHA256_DIGEST_LENGTH];
+    SHA256(x, x_len, H_x);
+
+    //Concatenate Epk(x) and H(x) for the encapsulation.
+    unsigned char* encapsulation = malloc(Epk_x_len + SHA256_DIGEST_LENGTH);
+    if (!encapsulation) {
+        perror("malloc");
+        free(x);
+        free(Epk_x);
+        return -1;
+    }
+    memcpy(encapsulation, Epk_x, Epk_x_len);
+    memcpy(encapsulation + Epk_x_len, H_x, SHA256_DIGEST_LENGTH);
+
+    //Use ske_keyGen to derive the symmetric key from x via KDF.
+    SKE_KEY SK;
+    ske_keyGen(&SK, x, x_len);
+
+    // Read input file into a buffer
+    FILE* inFile = fopen(fnIn, "rb");
+    if (!inFile) {
+        free(x);
+        free(Epk_x);
+        free(encapsulation);
+        return -1;
+    }
+    fseek(inFile, 0L, SEEK_END);
+    size_t fSize = ftell(inFile);
+    fseek(inFile, 0L, SEEK_SET);
+    unsigned char* fData = malloc(fSize);
+    fread(fData, 1, fSize, inFile);
+    fclose(inFile);
+
+    // Allocate output buffer for SKE encryption
+    size_t ske_out_len = ske_getOutputLen(fSize);
+    unsigned char* ske_ct = malloc(ske_out_len);
+    unsigned char IV[16]; // IV for AES CTR mode
+    RAND_bytes(IV, sizeof(IV)); // Generate a random IV
+    ske_encrypt(ske_ct, fData, fSize, &SK, IV);
+
+    //Concatenate the encapsulation and the SKE ciphertext.
+    unsigned char* final_ct = malloc(Epk_x_len + SHA256_DIGEST_LENGTH + ske_out_len);
+    if (!final_ct) {
+        free(x);
+        free(Epk_x);
+        free(encapsulation);
+        free(fData);
+        free(ske_ct);
+        return -1;
+    }
+    memcpy(final_ct, encapsulation, Epk_x_len + SHA256_DIGEST_LENGTH);
+    memcpy(final_ct + Epk_x_len + SHA256_DIGEST_LENGTH, ske_ct, ske_out_len);
+
+    // Write the result to the output file.
+    FILE* outFile = fopen(fnOut, "wb");
+    if (!outFile) {
+        free(x);
+        free(Epk_x);
+        free(encapsulation);
+        free(fData);
+        free(ske_ct);
+        free(final_ct);
+        return -1;
+    }
+    fwrite(final_ct, 1, Epk_x_len + SHA256_DIGEST_LENGTH + ske_out_len, outFile);
+    fclose(outFile);
+
+    // Free all allocated resources
+    free(x);
+    free(Epk_x);
+    free(encapsulation);
+    free(fData);
+    free(ske_ct);
+    free(final_ct);
+
+    return 0; 
 }
 
 /* NOTE: make sure you check the decapsulation is valid before continuing */
@@ -67,6 +168,135 @@ int kem_decrypt(const char* fnOut, const char* fnIn, RSA_KEY* K)
 	/* step 1: recover the symmetric key */
 	/* step 2: check decapsulation */
 	/* step 3: derive key from ephemKey and decrypt data. */
+
+    FILE* inFile = fopen(fnIn, "rb");
+    if (!inFile) {
+        return -1;
+    }
+
+    // Read the RSA-KEM part from the input ciphertext.
+    size_t rsa_cipher_len = rsa_numBytesN(K);  
+    unsigned char* rsa_cipher = malloc(rsa_cipher_len);
+    if (!rsa_cipher) {
+        fclose(inFile);
+        return -1;
+    }
+    fread(rsa_cipher, 1, rsa_cipher_len, inFile);
+
+    // Split it into C0 (RSA part) and C1 (hash part).
+    unsigned char* hash_part = malloc(SHA256_DIGEST_LENGTH);
+    if (!hash_part) {
+        free(rsa_cipher);
+        fclose(inFile);
+        return -1;
+    }
+    fread(hash_part, 1, SHA256_DIGEST_LENGTH, inFile);
+
+    // Decrypt C0 using RSA to get x (Dpk(C0)).
+    unsigned char* decrypted_x = malloc(rsa_cipher_len);
+    if (!decrypted_x) {
+        free(rsa_cipher);
+        free(hash_part);
+        fclose(inFile);
+        return -1;
+    }
+    size_t decrypted_x_len = rsa_decrypt(decrypted_x, rsa_cipher, rsa_cipher_len, K);
+
+    // Hash x and compare it with C1.
+    unsigned char computed_hash[SHA256_DIGEST_LENGTH];
+    SHA256(decrypted_x, decrypted_x_len, computed_hash);
+
+    if (memcmp(computed_hash, hash_part, SHA256_DIGEST_LENGTH) != 0) {
+        fprintf(stderr, "Hash does not match. Decapsulation failed.\n");
+        free(rsa_cipher);
+        free(hash_part);
+        free(decrypted_x);
+        fclose(inFile);
+        return -1;
+    }
+
+    // Use ske_keyGen to derive the symmetric key from x via KDF.
+    SKE_KEY derived_SK;
+    ske_keyGen(&derived_SK, decrypted_x, decrypted_x_len);
+
+    // Determine the size of the remaining ciphertext
+    fseek(inFile, 0L, SEEK_END);
+    size_t total_ct_size = ftell(inFile);
+    size_t remaining_ct_size = total_ct_size - rsa_cipher_len - SHA256_DIGEST_LENGTH;
+    fseek(inFile, rsa_cipher_len + SHA256_DIGEST_LENGTH, SEEK_SET);
+
+    // Decrypt the remaining part of the ciphertext using ske_decrypt.
+    unsigned char* ciphertext = malloc(remaining_ct_size);
+    if (!ciphertext) {
+        free(rsa_cipher);
+        free(hash_part);
+        free(decrypted_x);
+        fclose(inFile);
+        return -1;
+    }
+    fread(ciphertext, 1, remaining_ct_size, inFile);
+    fclose(inFile);  
+
+    unsigned char* plaintext = malloc(remaining_ct_size);
+    if (!plaintext) {
+        free(rsa_cipher);
+        free(hash_part);
+        free(decrypted_x);
+        free(ciphertext);
+        return -1;
+    }
+    size_t plaintext_len = ske_decrypt(plaintext, ciphertext, remaining_ct_size, &derived_SK);
+    if (plaintext_len == -1) {
+        fprintf(stderr, "Decryption failed.\n");
+        free(rsa_cipher);
+        free(hash_part);
+        free(decrypted_x);
+        free(ciphertext);
+        free(plaintext);
+        return -1;
+    }
+
+    // Write the plaintext to the output file.
+    FILE* outFile = fopen(fnOut, "wb");
+    if (!outFile) {
+        free(rsa_cipher);
+        free(hash_part);
+        free(decrypted_x);
+        free(ciphertext);
+        free(plaintext);
+        return -1;
+    }
+    fwrite(plaintext, 1, plaintext_len, outFile);
+    fclose(outFile);
+
+    free(rsa_cipher);
+    free(hash_part);
+    free(decrypted_x);
+    free(ciphertext);
+    free(plaintext);
+
+    return 0; 
+}
+
+int generate(char* fnOut, size_t nBits){
+	RSA_KEY K;
+
+	//create new file with .pub extension
+	char* fPub = malloc(strlen(fnOut) + 5);
+	strcpy(fPub, fnOut);
+	strcat(fPub, ".pub");
+
+	FILE* outPrivate = fopen(fnOut, "w");
+	FILE* outPublic = fopen(fPub, "w");
+
+	rsa_keyGen(nBits, &K);
+	rsa_writePrivate(outPrivate, &K);
+	rsa_writePublic(outPublic, &K);
+
+	fclose(outPrivate);
+	fclose(outPublic);
+	rsa_shredKey(&K);
+	free(fPub);
 	return 0;
 }
 
@@ -137,13 +367,54 @@ int main(int argc, char *argv[]) {
 	/* TODO: finish this off.  Be sure to erase sensitive data
 	 * like private keys when you're done with them (see the
 	 * rsa_shredKey function). */
-	switch (mode) {
-		case ENC:
-		case DEC:
-		case GEN:
-		default:
-			return 1;
-	}
 
-	return 0;
+    RSA_KEY K;
+    int result = -1;
+
+    switch (mode) {
+        case GEN: {
+            // Generate keys
+            result = rsa_keyGen(nBits, &K);
+            if (result != 0) {
+                fprintf(stderr, "Key generation failed.\n");
+                break;
+            }
+            // Write keys to files
+            char pubKeyFilename[FNLEN+4];
+            snprintf(pubKeyFilename, sizeof(pubKeyFilename), "%s.pub", fnOut);
+            FILE* privKeyFile = fopen(fnOut, "wb");
+            FILE* pubKeyFile = fopen(pubKeyFilename, "wb");
+            if (privKeyFile == NULL || pubKeyFile == NULL) {
+                result = 1;
+            } else {
+                rsa_writePrivate(privKeyFile, &K);
+                rsa_writePublic(pubKeyFile, &K);
+                fclose(privKeyFile);
+                fclose(pubKeyFile);
+                result = 0;
+            }
+            rsa_shredKey(&K);
+            break;
+        }
+        case ENC: {
+            // Encrypt with public key
+            rsa_readPublic(fnKey, &K);
+            result = kem_encrypt(fnOut, fnIn, &K);
+            rsa_shredKey(&K);
+            break;
+        }
+        case DEC: {
+            // Decrypt with private key
+            rsa_readPrivate(fnKey, &K);
+            result = kem_decrypt(fnOut, fnIn, &K);
+            rsa_shredKey(&K);
+            break;
+        }
+        default:
+            fprintf(stderr, "Invalid mode.\n");
+            result = 1;
+            break;
+    }
+
+    return result;
 }
