@@ -204,6 +204,10 @@ int rsa_initKey(RSA_KEY *K)
 int rsa_writePublic(FILE *f, RSA_KEY *K)
 {
 	/* only write n,e */
+	printf("When writing to public we have:\n");
+	gmp_printf("n: %Zx\n", K->n); // Prints the hexadecimal representation of mpz_t n
+	gmp_printf("e: %Zx\n", K->e); // Prints the hexadecimal representation of mpz_t e
+
 	zToFile(f, K->n);
 	zToFile(f, K->e);
 	return 0;
@@ -218,10 +222,18 @@ int rsa_writePrivate(FILE *f, RSA_KEY *K)
 	return 0;
 }
 int rsa_readPublic(FILE *f, RSA_KEY *K)
+
 {
 	rsa_initKey(K); /* will set all unused members to 0 */
+
 	zFromFile(f, K->n);
 	zFromFile(f, K->e);
+
+	// for debugging purposes:
+	printf("when read from public we have:\n");
+	gmp_printf("n:%Zx\n", K->n); // Prints the hexadecimal representation of mpz_t n
+	gmp_printf("e:%Zx\n", K->e); // Prints the hexadecimal representation of mpz_t e
+
 	return 0;
 }
 int rsa_readPrivate(FILE *f, RSA_KEY *K)
