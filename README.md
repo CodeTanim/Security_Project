@@ -6,3 +6,4 @@ Johan Delao - Ske on files <br/>
 Mansij Mishra - Kem-enc <br/>
 ### Notes
 - When `test.sh` runs, it stores the test result's output in “output” but shows that it failed for ske-on-files. However, if we run `./ske-on-files-test` separately it works. 
+- Our Makefile needed to be adjusted to contain the paths to openssl and GNP installations to satisfy our ARM based computers. 
