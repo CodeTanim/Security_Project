@@ -32,6 +32,47 @@ bash
 ```
 xxd testkey.pub
 ```
+When doing encryption by running the command:
+
+bash 
+```
+./kem-enc -e -i file -o ct.txt -k testkey.pub
+```
+
+We did further checking of the testkey.pub file content, and check the values of n and e after rsa_readpublic had been called, and found the following output and error (note that the output of the file has each byte printed in hexadecimal format:
+
+bash
+```
+File content:
+00 01 00 00 00 00 00 00 f3 38 74 17 f6 db 64 90 
+b3 e0 a3 41 d2 58 42 ca 00 c8 4e 89 08 c9 7d bb 
+38 79 f3 2a e9 b1 4e 2c 75 69 1c af 1c d0 08 39 
+df ca 7b 80 4a cf aa 3f 57 ca db 8c df e8 74 38 
+2f c5 d0 6f 2f a2 2e be 4a d4 1f 8f 8a 73 e6 db 
+da c0 5a 2b 1b aa 44 76 70 da 76 a1 31 f4 91 e8 
+ca 45 c8 84 73 cc a7 cb 6b d1 d0 0d e6 36 7f 37 
+18 14 a2 18 f9 8e a1 cc 92 6f 3a ed 92 21 d4 9c 
+4c c3 3a 7e 38 fc c0 50 7a ca e8 21 b2 1b f7 3e 
+e1 db 8c 62 67 e5 1c 3a a5 4d 96 2e e1 0f dd 01 
+d8 74 2f a3 1c 9f e3 92 e0 4a 96 5c f6 42 a8 08 
+47 a7 ce 67 6a 77 fd 29 f7 88 fa 69 77 87 24 df 
+35 c9 45 06 0c 03 8b d8 ca e3 85 d0 26 6a 6d 0a 
+ed 1d 17 4f 35 89 14 8a ad c4 03 4b 73 64 bb 78 
+8f da ad e7 c2 cd 06 49 e1 21 17 dc 35 c2 d0 c1 
+3a d2 ab fb b9 98 55 58 dd 01 24 22 0c a0 73 63 
+0f 4c fb 1f eb a5 43 b9 03 00 00 00 00 00 00 00 
+01 00 01 
+when read from public we have:
+n:0
+e:0
+kem-enc(88797,0x1e6a3c140) malloc: Incorrect checksum for freed object 0x12ee069f8: probably modified after being freed.
+Corrupt value: 0x2c4eb1e92af37938
+kem-enc(88797,0x1e6a3c140) malloc: *** set a breakpoint in malloc_error_break to debug
+[1]    88797 abort      ./kem-enc -e -i file -o ct.txt -k testkey.pub
+```
+
+
+
 
 Despite the file testkey.pub appearing correctly populated, the rsa_readPublic function was reading n and e as 0, suggesting an issue with extracting the n and e values. To diagnose, we examined how the file size was interpreted within the function, finding it interpreted as excessively large (e.g., 281474976710656 and 10610458615532067060 bytes).
 
