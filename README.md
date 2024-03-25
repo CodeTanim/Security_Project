@@ -15,6 +15,7 @@ Running the command:
 
 ```bash
 ./kem-enc -b 2048 -g testkey
+```
 
 
 
