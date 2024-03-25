@@ -107,7 +107,7 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 						SKE_KEY *K, unsigned char *IV, size_t offset_out)
 {
 	size_t result, fileSize;
-	struct stat st;			   // used to get size of file
+	struct stat st; // used to get size of file
 	int returnval;
 	returnval = access(fnin, R_OK);
 
@@ -132,9 +132,9 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 		}
 		else
 		{
-			unsigned char buffer[1024];
+			unsigned char buffer[8192];
 			// For best practices, you would use `ssize_t` for error handling (read would output -1 if an error occurs) but for simplicity, we will assume no errors will occur (gg error handling)
-			size_t bytesRead = read(fd, buffer, sizeof(buffer));
+			// size_t bytesRead = read(fd, buffer, sizeof(buffer));
 
 			stat(fnin, &st);
 			fileSize = st.st_size;
@@ -169,7 +169,7 @@ size_t ske_encrypt_file(const char *fnout, const char *fnin,
 				}
 				else
 				{
-					size_t bytes_written = write(fdTwo, outPutBuffer, result);
+					// size_t bytes_written = write(fdTwo, outPutBuffer, result);
 					close(fdTwo);
 					printf("encrypted successfully \n");
 					return result;
@@ -251,9 +251,9 @@ size_t ske_decrypt_file(const char *fnout, const char *fnin,
 		}
 		else
 		{
-			unsigned char buffer[1024];
+			unsigned char buffer[8192];
 			// For best practices, you would use `ssize_t` for error handling (read would output -1 if an error occurs) but for simplicity, we will assume no errors will occur (gg error handling)
-			size_t bytesRead = read(fd, buffer, sizeof(buffer));
+			// size_t bytesRead = read(fd, buffer, sizeof(buffer));
 
 			stat(fnin, &st);
 			fileSize = st.st_size;
@@ -288,7 +288,7 @@ size_t ske_decrypt_file(const char *fnout, const char *fnin,
 				}
 				else
 				{
-					size_t bytes_written = write(fdTwo, outPutBuffer, result);
+					// size_t bytes_written = write(fdTwo, outPutBuffer, result);
 					close(fdTwo);
 					printf("decrypted successfully \n");
 					return result;
@@ -297,5 +297,4 @@ size_t ske_decrypt_file(const char *fnout, const char *fnin,
 		}
 	}
 	return 0;
-	
 }
