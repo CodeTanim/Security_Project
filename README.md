@@ -13,9 +13,8 @@ Key Generation
 Running the command:
 
 
-```./kem-enc -b 2048 -g testkey
-```
-
+```bash
+./kem-enc -b 2048 -g testkey
 
 
 
